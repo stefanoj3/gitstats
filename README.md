@@ -30,3 +30,5 @@ In order to run gitstats while developing all you need to do is:
 
 If you wanna play with the configuration just create another config file to use instead of `sampleconfig.toml`,
 by default `devconfig.toml` is ignored in the `.gitignore` file. 
+
+bla
