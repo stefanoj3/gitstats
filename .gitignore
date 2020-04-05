@@ -1,0 +1,5 @@
+vendor/
+dist/
+!dist/.gitkeep
+coverage.txt
+devconfig.toml
