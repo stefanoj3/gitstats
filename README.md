@@ -1,4 +1,6 @@
 ## gitstats
+[![codecov](https://codecov.io/gh/stefanoj3/gitstats/branch/master/graph/badge.svg?token=VwDTLXudLv)](https://codecov.io/gh/stefanoj3/gitstats)
+
 gitstats is a tool to collect statistics about github activity for a given: organization, repositories list, user handdles.
 
 The application is still in development and it is missing core features.
@@ -41,6 +43,5 @@ by default `devconfig.toml` is ignored in the `.gitignore` file.
 ## What is missing:
 - the output needs to be printed in a format that can be used by a human
 - no statistics per users are produced (only general statistics for all repos/users involved)
-- add badge for codecov to the repo
 - add scrutinizer integration
 - dockerize application & docker hub integration
