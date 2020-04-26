@@ -11,113 +11,176 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var baseTime = time.Date(2007, time.July, 7, 0, 0, 0, 0, time.UTC)
+var (
+	baseTime = time.Date(2007, time.July, 7, 0, 0, 0, 0, time.UTC)
+
+	user1           = "user1"
+	user2           = "user2"
+	user3           = "user3"
+	userToBeIgnored = "ignored_user_123"
+
+	statisticsPRs = []*github.PullRequest{
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(-time.Hour)),
+			MergedAt:  timeRef(baseTime),
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(-time.Hour)),
+			MergedAt:  timeRef(baseTime),
+			ClosedAt:  timeRef(baseTime), // this should be ignored because it got merged
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(-time.Hour)),
+			ClosedAt:  timeRef(baseTime),
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(-time.Hour)),
+			ClosedAt:  timeRef(baseTime),
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(-time.Hour)),
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime),
+		},
+		{
+			User:      &github.User{Login: &userToBeIgnored},
+			CreatedAt: timeRef(baseTime),
+		},
+	}
+	statisticsCommits = []*github.RepositoryCommit{
+		{
+			Author: &github.User{Login: &user1},
+			Commit: &github.Commit{Committer: &github.CommitAuthor{Date: timeRef(baseTime)}},
+		},
+		{
+			Author: &github.User{Login: &user1},
+			Commit: &github.Commit{Committer: &github.CommitAuthor{Date: timeRef(baseTime.Add(time.Hour))}},
+		},
+		{
+			Author: &github.User{Login: &user2},
+			Commit: &github.Commit{Committer: &github.CommitAuthor{Date: timeRef(baseTime)}},
+		},
+		{
+			Author: &github.User{Login: &userToBeIgnored},
+			Commit: &github.Commit{Committer: &github.CommitAuthor{Date: timeRef(baseTime)}},
+		},
+	}
+	statisticsComments = []*github.PullRequestComment{
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(-time.Hour * 5)),
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(-time.Hour * 12)),
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(-time.Hour * 3)),
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(-time.Hour * 7)),
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(-time.Hour)),
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime),
+		},
+		{
+			User:      &github.User{Login: &user1},
+			CreatedAt: timeRef(baseTime.Add(+time.Hour)),
+		},
+		{
+			User:      &github.User{Login: &userToBeIgnored},
+			CreatedAt: timeRef(baseTime.Add(+time.Hour)),
+		},
+	}
+)
 
 func TestGetStatisticsShouldCreateStatistics(t *testing.T) {
-	pullRequestsFetcher := usecase.PullRequestsFetcherMock{
-		FetchPullRequestsForFunc: func(
-			ctx context.Context,
-			from time.Time,
-			to time.Time,
-			organization string,
-			repositories []string,
-			usersHandles []string,
-		) ([]*github.PullRequest, error) {
-			prs := []*github.PullRequest{
-				{
-					CreatedAt: timeRef(baseTime.Add(-time.Hour)),
-					MergedAt:  timeRef(baseTime),
-				},
-				{
-					CreatedAt: timeRef(baseTime.Add(-time.Hour)),
-					MergedAt:  timeRef(baseTime),
-					ClosedAt:  timeRef(baseTime), // this should be ignored because it got merged
-				},
-				{
-					CreatedAt: timeRef(baseTime.Add(-time.Hour)),
-					ClosedAt:  timeRef(baseTime),
-				},
-				{
-					CreatedAt: timeRef(baseTime.Add(-time.Hour)),
-					ClosedAt:  timeRef(baseTime),
-				},
-				{
-					CreatedAt: timeRef(baseTime.Add(-time.Hour)),
-				},
-			}
+	finder := usecase.GithubDataFinderMock{FetchAllForFunc: func(
+		ctx context.Context,
+		from time.Time,
+		to time.Time,
+		delta time.Duration,
+		organization string,
+		repositories []string,
+	) ([]*github.PullRequest, []*github.RepositoryCommit, []*github.PullRequestComment, error) {
+		return statisticsPRs, statisticsCommits, statisticsComments, nil
+	}}
 
-			return prs, nil
-		},
-	}
-	commentsFetcher := usecase.CommentsFetcherMock{
-		FetchCommentsForFunc: func(
-			ctx context.Context,
-			organization string,
-			repository string,
-			number int,
-			usersHandles []string,
-		) ([]*github.PullRequestComment, error) {
-			return nil, nil
-		},
-	}
-
-	sut := usecase.NewGetStatistics(&pullRequestsFetcher, &commentsFetcher)
+	sut := usecase.NewGetStatistics(&finder)
 
 	stats, err := sut.GetStatistics(
 		context.Background(),
 		baseTime.Add(-time.Hour*24*30),
 		baseTime,
+		time.Microsecond,
 		"my-organization",
 		[]string{"my-repository"},
-		nil,
+		[]string{user1, user2, user3},
 	)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, stats)
 
-	assert.Equal(t, stats.PullRequestsStatistics.Total, 5)
-	assert.Equal(t, stats.PullRequestsStatistics.Merged, 2)
-	assert.Equal(t, stats.PullRequestsStatistics.Closed, 2)
-	assert.Equal(t, stats.PullRequestsStatistics.Open, 1)
-}
+	assert.Equal(t, 6, stats.PullRequestsStatistics.Total)
+	assert.Equal(t, 2, stats.PullRequestsStatistics.Merged)
+	assert.Equal(t, 2, stats.PullRequestsStatistics.Closed)
+	assert.Equal(t, 2, stats.PullRequestsStatistics.Open)
 
-func timeRef(t time.Time) *time.Time {
-	return &t
+	assert.Equal(t, 1, stats.UsersStatistics.At(user1, baseTime).PullRequestsCreated)
+	assert.Equal(t, 5, stats.UsersStatistics.At(user1, baseTime.Add(-time.Hour)).PullRequestsCreated)
+
+	assert.Equal(t, 0, stats.UsersStatistics.At(user2, baseTime).PullRequestsCreated)
+	assert.Equal(t, 0, stats.UsersStatistics.At(user2, baseTime.Add(-time.Hour)).PullRequestsCreated)
+
+	assert.Equal(t, 0, stats.UsersStatistics.At(user3, baseTime).PullRequestsCreated)
+	assert.Equal(t, 0, stats.UsersStatistics.At(user3, baseTime.Add(-time.Hour)).PullRequestsCreated)
+
+	assert.Equal(t, 2, stats.UsersStatistics.At(user1, baseTime).Commits)
+	assert.Equal(t, 1, stats.UsersStatistics.At(user2, baseTime).Commits)
+	assert.Equal(t, 0, stats.UsersStatistics.At(user3, baseTime).Commits)
+
+	assert.Equal(t, 5, stats.UsersStatistics.At(user1, baseTime.Add(-time.Hour)).Comments)
+	assert.Equal(t, 2, stats.UsersStatistics.At(user1, baseTime).Comments)
+
+	assert.Equal(t, 0, stats.UsersStatistics.At(user2, baseTime).Comments)
+	assert.Equal(t, 0, stats.UsersStatistics.At(user3, baseTime).Comments)
 }
 
 func TestGetStatisticsShouldFailWhenPullRequestFetcherFails(t *testing.T) {
 	errorMessage := "something 123"
 
-	pullRequestsFetcher := usecase.PullRequestsFetcherMock{
-		FetchPullRequestsForFunc: func(
-			ctx context.Context,
-			from time.Time,
-			to time.Time,
-			organization string,
-			repositories []string,
-			usersHandles []string,
-		) ([]*github.PullRequest, error) {
-			return nil, errors.New(errorMessage)
-		},
-	}
-	commentsFetcher := usecase.CommentsFetcherMock{
-		FetchCommentsForFunc: func(
-			ctx context.Context,
-			organization string,
-			repository string,
-			number int,
-			usersHandles []string,
-		) ([]*github.PullRequestComment, error) {
-			return nil, nil
-		},
-	}
+	finder := usecase.GithubDataFinderMock{FetchAllForFunc: func(
+		ctx context.Context,
+		from time.Time,
+		to time.Time,
+		delta time.Duration,
+		organization string,
+		repositories []string,
+	) ([]*github.PullRequest, []*github.RepositoryCommit, []*github.PullRequestComment, error) {
+		return nil, nil, nil, errors.New(errorMessage)
+	}}
 
-	sut := usecase.NewGetStatistics(&pullRequestsFetcher, &commentsFetcher)
+	sut := usecase.NewGetStatistics(&finder)
 
 	stats, err := sut.GetStatistics(
 		context.Background(),
 		baseTime.Add(-time.Hour*24*30),
 		baseTime,
+		time.Microsecond,
 		"my-organization",
 		[]string{"my-repository"},
 		nil,
@@ -127,4 +190,8 @@ func TestGetStatisticsShouldFailWhenPullRequestFetcherFails(t *testing.T) {
 	assert.Contains(t, err.Error(), errorMessage)
 
 	assert.Nil(t, stats)
+}
+
+func timeRef(t time.Time) *time.Time {
+	return &t
 }
