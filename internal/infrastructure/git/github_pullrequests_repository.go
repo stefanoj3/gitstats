@@ -9,6 +9,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const pullRequestsPerPage = 100
+
 func NewGithubPullRequestsRepository(client *github.Client) *GithubPullRequestsRepository {
 	return &GithubPullRequestsRepository{client: client}
 }
@@ -17,18 +19,17 @@ type GithubPullRequestsRepository struct {
 	client *github.Client
 }
 
-func (r *GithubPullRequestsRepository) FetchPullRequestsFor(
+func (r *GithubPullRequestsRepository) FindPullRequestsFor(
 	ctx context.Context,
 	from time.Time,
 	to time.Time,
 	organization string,
 	repositories []string,
-	usersHandles []string,
 ) ([]*github.PullRequest, error) {
 	result := make([]*github.PullRequest, 0)
 
 	for _, repository := range repositories {
-		prs, err := r.fetchAllFor(ctx, from, to, organization, repository, usersHandles)
+		prs, err := r.fetchAllFor(ctx, from, to, organization, repository)
 		if err != nil {
 			return nil, err
 		}
@@ -45,12 +46,11 @@ func (r *GithubPullRequestsRepository) fetchAllFor(
 	to time.Time,
 	organization string,
 	repository string,
-	usersHandles []string,
 ) ([]*github.PullRequest, error) {
 	listOptions := github.PullRequestListOptions{
 		ListOptions: github.ListOptions{
 			Page:    1,
-			PerPage: 100,
+			PerPage: pullRequestsPerPage,
 		},
 		State:     "all",
 		Sort:      "created",
@@ -59,7 +59,7 @@ func (r *GithubPullRequestsRepository) fetchAllFor(
 
 	fmt.Println("performing call for", repository, listOptions)
 
-	result := make([]*github.PullRequest, 0, 100)
+	result := make([]*github.PullRequest, 0, pullRequestsPerPage)
 
 	shouldRun := true
 	for shouldRun {
@@ -81,10 +81,6 @@ func (r *GithubPullRequestsRepository) fetchAllFor(
 			}
 
 			if pr.CreatedAt.After(to) {
-				continue
-			}
-
-			if !userIn(*pr.User.Login, usersHandles) {
 				continue
 			}
 

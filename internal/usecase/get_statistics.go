@@ -4,99 +4,143 @@ import (
 	"context"
 	"time"
 
+	"github.com/stefanoj3/gitstats/internal/domain/statistics"
+
 	"github.com/google/go-github/github"
 	"github.com/pkg/errors"
 )
 
-type UserStatistics struct {
-	// nolint:godox
-	// TODO: define and add statistics by user
-}
-
-type PullRequestsStatistics struct {
-	// TimeToMerge represents the average time it takes for a PR to be merged
-	TimeToMerge time.Duration
-	// Merged represents the total or PRs that got merged
-	Merged int
-	// Closed represents the total or PRs that got closed but never merged
-	Closed int
-	// Open represents the total or PRs that are still open
-	Open int
-	// Total is the total amount of PRs
-	Total int
-}
-
-type Statistics struct {
-	PullRequestsStatistics PullRequestsStatistics
-	UsersStatistics        []UserStatistics
-}
-
-func NewGetStatistics(pullRequestsFetcher PullRequestsFetcher, commentsFetcher CommentsFetcher) *GetStatistics {
+func NewGetStatistics(githubDataFinder GithubDataFinder) *GetStatistics {
 	return &GetStatistics{
-		pullRequestsFetcher: pullRequestsFetcher,
-		commentsFetcher:     commentsFetcher,
+		githubDataFinder: githubDataFinder,
 	}
 }
 
 type GetStatistics struct {
-	pullRequestsFetcher PullRequestsFetcher
-	commentsFetcher     CommentsFetcher
+	githubDataFinder GithubDataFinder
 }
 
 func (g *GetStatistics) GetStatistics(
 	ctx context.Context,
 	from time.Time,
 	to time.Time,
+	delta time.Duration,
 	organization string,
 	repositories []string,
-	usersHandles []string,
-) (*Statistics, error) {
-	pullRequests, err := g.pullRequestsFetcher.FetchPullRequestsFor(
+	userHandles []string,
+) (*statistics.Statistics, error) {
+	pullRequests, commits, comments, err := g.githubDataFinder.FetchAllFor(
 		ctx,
 		from,
 		to,
+		delta,
 		organization,
 		repositories,
-		usersHandles,
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "GetStatistics: failed to Get statistics")
+		return nil, errors.Wrap(err, "GetStatistics: failed to get github statistics")
 	}
 
-	statistics := Statistics{
-		PullRequestsStatistics: pullRequestStatisticsFromRawPullRequests(pullRequests),
+	stats := statistics.Statistics{
+		PullRequestsStatistics: pullRequestStatisticsFromRawPullRequests(pullRequests, userHandles),
+		UsersStatistics:        g.calculateUserStatistics(pullRequests, comments, commits, userHandles),
 	}
 
-	return &statistics, nil
+	return &stats, nil
 }
 
-func pullRequestStatisticsFromRawPullRequests(pullRequests []*github.PullRequest) PullRequestsStatistics {
-	statistics := PullRequestsStatistics{}
+func (g *GetStatistics) calculateUserStatistics(
+	pullRequests []*github.PullRequest,
+	comments []*github.PullRequestComment,
+	commits []*github.RepositoryCommit,
+	userHandles []string,
+) statistics.UsersStatistics {
+	shouldExcludeFunc := buildUserFilterFunc(userHandles)
 
-	statistics.Total = len(pullRequests)
-
-	timeToMergeDurations := make([]time.Duration, 0, statistics.Total)
+	stats := statistics.NewUserStatistics()
 
 	for _, pr := range pullRequests {
-		if pr.ClosedAt != nil && pr.MergedAt == nil {
-			statistics.Closed++
+		if shouldExcludeFunc(*pr.User.Login) {
+			continue
 		}
 
-		if pr.MergedAt != nil {
-			statistics.Merged++
+		stats.At(*pr.User.Login, *pr.CreatedAt).PullRequestsCreated++
+	}
+
+	for _, comment := range comments {
+		if shouldExcludeFunc(*comment.User.Login) {
+			continue
+		}
+
+		stats.At(*comment.User.Login, *comment.CreatedAt).Comments++
+	}
+
+	for _, commit := range commits {
+		if shouldExcludeFunc(*commit.Author.Login) {
+			continue
+		}
+
+		stats.At(*commit.Author.Login, *commit.Commit.Committer.Date).Commits++
+	}
+
+	return stats
+}
+
+func buildUserFilterFunc(userHandles []string) func(user string) bool {
+	userMap := make(map[string]interface{}, len(userHandles))
+	for _, u := range userHandles {
+		userMap[u] = nil
+	}
+
+	shouldExclude := func(user string) bool {
+		if len(userMap) == 0 {
+			return false
+		}
+
+		_, ok := userMap[user]
+
+		return !ok
+	}
+
+	return shouldExclude
+}
+
+func pullRequestStatisticsFromRawPullRequests(
+	pullRequests []*github.PullRequest,
+	userHandles []string,
+) statistics.PullRequestsStatistics {
+	shouldExcludeFunc := buildUserFilterFunc(userHandles)
+
+	stats := statistics.PullRequestsStatistics{}
+
+	timeToMergeDurations := make([]time.Duration, 0, stats.Total)
+
+	for _, pr := range pullRequests {
+		if shouldExcludeFunc(*pr.User.Login) {
+			continue
+		}
+
+		stats.Total++
+
+		if wasClosed(pr) {
+			stats.Closed++
+		}
+
+		if warMerged(pr) {
+			stats.Merged++
 
 			timeToMerge := pr.MergedAt.Sub(*pr.CreatedAt)
 			timeToMergeDurations = append(timeToMergeDurations, timeToMerge)
 		}
 
-		if pr.MergedAt == nil && pr.ClosedAt == nil {
-			statistics.Open++
+		if isOpen(pr) {
+			stats.Open++
 		}
 	}
 
-	statistics.TimeToMerge = averageDurations(timeToMergeDurations)
+	stats.TimeToMerge = averageDurations(timeToMergeDurations)
 
-	return statistics
+	return stats
 }
 
 func averageDurations(values []time.Duration) time.Duration {
@@ -111,4 +155,16 @@ func averageDurations(values []time.Duration) time.Duration {
 	}
 
 	return total / time.Duration(count)
+}
+
+func wasClosed(pullRequest *github.PullRequest) bool {
+	return pullRequest.ClosedAt != nil && pullRequest.MergedAt == nil
+}
+
+func warMerged(pullRequest *github.PullRequest) bool {
+	return pullRequest.MergedAt != nil
+}
+
+func isOpen(pullRequest *github.PullRequest) bool {
+	return pullRequest.MergedAt == nil && pullRequest.ClosedAt == nil
 }

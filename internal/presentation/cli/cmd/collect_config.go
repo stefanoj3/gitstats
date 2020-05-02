@@ -18,6 +18,7 @@ type CollectConfig struct {
 	Users []string
 	From  time.Time
 	To    time.Time
+	Delta time.Duration
 }
 
 func getCollectConfig(cmd *cobra.Command) (CollectConfig, error) {
@@ -45,6 +46,11 @@ func getCollectConfig(cmd *cobra.Command) (CollectConfig, error) {
 	config.To, err = time.Parse(timeFormatLayout, rawToDate)
 	if err != nil {
 		return config, errors.Wrapf(err, failedToParseTimeErrorString, flagCollectToDate)
+	}
+
+	config.Delta, err = cmd.Flags().GetDuration(flagCollectDelta)
+	if err != nil {
+		return config, errors.Wrapf(err, "failed to parse %s", flagCollectDelta)
 	}
 
 	return config, nil
