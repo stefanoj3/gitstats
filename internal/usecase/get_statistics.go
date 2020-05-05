@@ -4,20 +4,24 @@ import (
 	"context"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/stefanoj3/gitstats/internal/domain/statistics"
 
 	"github.com/google/go-github/github"
 	"github.com/pkg/errors"
 )
 
-func NewGetStatistics(githubDataFinder GithubDataFinder) *GetStatistics {
+func NewGetStatistics(githubDataFinder GithubDataFinder, logger *zap.Logger) *GetStatistics {
 	return &GetStatistics{
 		githubDataFinder: githubDataFinder,
+		logger:           logger,
 	}
 }
 
 type GetStatistics struct {
 	githubDataFinder GithubDataFinder
+	logger           *zap.Logger
 }
 
 func (g *GetStatistics) GetStatistics(

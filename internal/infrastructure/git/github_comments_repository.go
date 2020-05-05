@@ -2,20 +2,21 @@ package git
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/go-github/github"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 const commentsPerPage = 50
 
-func NewGithubCommentsRepository(client *github.Client) *GithubCommentsRepository {
-	return &GithubCommentsRepository{client: client}
+func NewGithubCommentsRepository(client *github.Client, logger *zap.Logger) *GithubCommentsRepository {
+	return &GithubCommentsRepository{client: client, logger: logger}
 }
 
 type GithubCommentsRepository struct {
 	client *github.Client
+	logger *zap.Logger
 }
 
 func (r *GithubCommentsRepository) FindCommentsFor(
@@ -33,8 +34,17 @@ func (r *GithubCommentsRepository) FindCommentsFor(
 	result := make([]*github.PullRequestComment, 0, commentsPerPage)
 
 	shouldRun := true
+
+	//nolint:dupl
 	for shouldRun {
-		fmt.Println("listing comments for", organization, repository, number, &opts)
+		r.logger.Debug(
+			"listing comments",
+			zap.String("organization", organization),
+			zap.String("repository", organization),
+			zap.Int("number", number),
+			zap.Int("page", opts.Page),
+			zap.Int("perPage", opts.PerPage),
+		)
 
 		comments, _, err := r.client.PullRequests.ListComments(ctx, organization, repository, number, &opts)
 		if err != nil {

@@ -6,20 +6,28 @@ import (
 
 	"github.com/google/go-github/github"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 func NewGithubAggregatedRepository(
 	pullRequestsRepository *GithubPullRequestsRepository,
 	commitsRepository *GithubCommitsRepository,
 	commentRepository *GithubCommentsRepository,
+	logger *zap.Logger,
 ) *GithubAggregatedRepository {
-	return &GithubAggregatedRepository{pullRequestsRepository: pullRequestsRepository, commitsRepository: commitsRepository, commentRepository: commentRepository}
+	return &GithubAggregatedRepository{
+		pullRequestsRepository: pullRequestsRepository,
+		commitsRepository:      commitsRepository,
+		commentRepository:      commentRepository,
+		logger:                 logger,
+	}
 }
 
 type GithubAggregatedRepository struct {
 	pullRequestsRepository *GithubPullRequestsRepository
 	commitsRepository      *GithubCommitsRepository
 	commentRepository      *GithubCommentsRepository
+	logger                 *zap.Logger
 }
 
 func (r *GithubAggregatedRepository) FetchAllFor(
@@ -30,6 +38,16 @@ func (r *GithubAggregatedRepository) FetchAllFor(
 	organization string,
 	repositories []string,
 ) ([]*github.PullRequest, []*github.RepositoryCommit, []*github.PullRequestComment, error) {
+	logger := r.logger.With(
+		zap.String("organization", organization),
+		zap.Strings("repositories", repositories),
+		zap.Time("from", from),
+		zap.Time("to", to),
+		zap.Duration("delta", delta),
+	)
+
+	logger.Debug("listing pull requests")
+
 	pullRequests, err := r.pullRequestsRepository.FindPullRequestsFor(
 		ctx,
 		from.Add(-delta),
@@ -41,15 +59,25 @@ func (r *GithubAggregatedRepository) FetchAllFor(
 		return nil, nil, nil, errors.Wrap(err, "FetchAllFor: failed to get pull requests")
 	}
 
+	logger.Debug("done", zap.Int("pullRequestsCount", len(pullRequests)))
+
+	logger.Debug("fetching commits")
+
 	commits, err := r.getCommitsFor(ctx, pullRequests)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "FetchAllFor: failed to get commits")
 	}
 
+	logger.Debug("done", zap.Int("commitsCount", len(commits)))
+
+	logger.Debug("fetching comments")
+
 	comments, err := r.getCommentsFor(ctx, pullRequests)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "FetchAllFor: failed to get comments")
 	}
+
+	logger.Debug("done", zap.Int("commentsCount", len(comments)))
 
 	return filterPullRequestsByDateRange(from, to, pullRequests),
 		filterCommitsByDateRange(from, to, commits),

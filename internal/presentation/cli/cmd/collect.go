@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"time"
 
@@ -12,14 +11,16 @@ import (
 	"github.com/stefanoj3/gitstats/internal/domain/statistics"
 	"github.com/stefanoj3/gitstats/internal/infrastructure/git"
 	"github.com/stefanoj3/gitstats/internal/infrastructure/oauth"
+	"github.com/stefanoj3/gitstats/internal/presentation/serialization"
 	"github.com/stefanoj3/gitstats/internal/usecase"
+	"go.uber.org/zap"
 )
 
-func NewCollectCommand() *cobra.Command {
+func NewCollectCommand(logger *zap.Logger) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "collect",
 		Short: "Collect statistics",
-		RunE:  collectCommand,
+		RunE:  buildCollectCommand(logger),
 	}
 
 	cmd.Flags().StringP(
@@ -54,82 +55,111 @@ func NewCollectCommand() *cobra.Command {
 	)
 	Must(cmd.MarkFlagRequired(flagCollectToDate))
 
+	cmd.Flags().StringP(
+		flagOutputFilePrefix,
+		flagOutputFilePrefixShort,
+		"out",
+		"prefix for the output file",
+	)
+
 	return cmd
 }
 
-func collectCommand(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
+func buildCollectCommand(logger *zap.Logger) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		logger.Info("Initializing")
 
-	token, err := getGithubToken()
+		ctx := context.Background()
+
+		token, err := getGithubToken()
+		if err != nil {
+			return errors.Wrap(err, "CollectCommand: failed to get token")
+		}
+
+		config, err := getCollectConfig(cmd)
+		if err != nil {
+			return errors.Wrap(err, "CollectCommand: failed to get config")
+		}
+
+		client := github.NewClient(
+			oauth.NewClient(ctx, token),
+		)
+
+		githubAggregatedRepository := git.NewGithubAggregatedRepository(
+			git.NewGithubPullRequestsRepository(client, logger),
+			git.NewGithubCommitsRepository(client, logger),
+			git.NewGithubCommentsRepository(client, logger),
+			logger,
+		)
+
+		getStatisticsUseCase := usecase.NewGetStatistics(
+			githubAggregatedRepository,
+			logger,
+		)
+
+		logger.Info(
+			"Starting to collect statistics",
+			zap.String("organization", config.Organization),
+			zap.Strings("repositories", config.Repositories),
+			zap.Strings("users", config.Users),
+			zap.Time("from", config.From),
+			zap.Time("to", config.To),
+			zap.Duration("delta", config.Delta),
+			zap.Int("tokenLen", len(token)),
+		)
+
+		stats, err := getStatisticsUseCase.GetStatistics(
+			ctx,
+			config.From,
+			config.To,
+			config.Delta,
+			config.Organization,
+			config.Repositories,
+			config.Users,
+		)
+		if err != nil {
+			return errors.Wrap(err, "CollectCommand: failed to get statistics")
+		}
+
+		logger.Info(
+			"Done",
+			zap.Duration("timeToMerge", stats.PullRequestsStatistics.TimeToMerge),
+			zap.Int("merged", stats.PullRequestsStatistics.Merged),
+			zap.Int("open", stats.PullRequestsStatistics.Open),
+			zap.Int("closed", stats.PullRequestsStatistics.Closed),
+			zap.Int("total", stats.PullRequestsStatistics.Total),
+		)
+
+		return writeOutput(config, stats, logger)
+	}
+}
+
+func writeOutput(config CollectConfig, stats *statistics.Statistics, logger *zap.Logger) error {
+	pullRequestsOutFile := config.OutputFilePrefix + "_pull_requests.csv"
+
+	logger.Info("Writing output file for pull requests", zap.String("path", pullRequestsOutFile))
+
+	err := serialization.WritePullRequestStatistics(pullRequestsOutFile, stats.PullRequestsStatistics)
 	if err != nil {
-		return errors.Wrap(err, "CollectCommand: failed to get token")
+		return errors.Wrap(err, "CollectCommand: failed to write pull requests statistics")
 	}
 
-	config, err := getCollectConfig(cmd)
-	if err != nil {
-		return errors.Wrap(err, "CollectCommand: failed to get config")
-	}
+	usersOutFile := config.OutputFilePrefix + "_user.csv"
 
-	client := github.NewClient(
-		oauth.NewClient(ctx, token),
-	)
+	logger.Info("Writing output file for users", zap.String("path", usersOutFile))
 
-	githubAggregatedRepository := git.NewGithubAggregatedRepository(
-		git.NewGithubPullRequestsRepository(client),
-		git.NewGithubCommitsRepository(client),
-		git.NewGithubCommentsRepository(client),
-	)
-
-	getStatisticsUseCase := usecase.NewGetStatistics(
-		githubAggregatedRepository,
-	)
-
-	stats, err := getStatisticsUseCase.GetStatistics(
-		ctx,
+	err = serialization.WriteUsersStatistics(
+		usersOutFile,
+		stats.UsersStatistics,
 		config.From,
 		config.To,
-		config.Delta,
-		config.Organization,
-		config.Repositories,
 		config.Users,
 	)
 	if err != nil {
-		return errors.Wrap(err, "CollectCommand: failed to get statistics")
+		return errors.Wrap(err, "CollectCommand: failed to write users statistics")
 	}
-
-	printResults(stats, config)
 
 	return nil
-}
-
-func printResults(stats *statistics.Statistics, config CollectConfig) {
-	rangedTime := make([]time.Time, 0)
-	start := config.From
-	rangedTime = append(rangedTime, start)
-
-	for {
-		if start.Before(config.To) {
-			start = start.Add(time.Hour * 24)
-		} else {
-			break
-		}
-
-		rangedTime = append(rangedTime, start)
-	}
-
-	for _, user := range config.Users {
-		for _, t := range rangedTime {
-			s := stats.UsersStatistics.At(user, t)
-			fmt.Println(
-				fmt.Sprintf("%s login: %s - PRs: %d, Comments: %d, Commits: %d", t.Format(time.RFC3339), user, s.PullRequestsCreated, s.Comments, s.Commits))
-		}
-	}
-
-	fmt.Println("TimeToMerge:", stats.PullRequestsStatistics.TimeToMerge)
-	fmt.Println("Merged:", stats.PullRequestsStatistics.Merged)
-	fmt.Println("Closed:", stats.PullRequestsStatistics.Closed)
-	fmt.Println("Open:", stats.PullRequestsStatistics.Open)
-	fmt.Println("Total:", stats.PullRequestsStatistics.Total)
 }
 
 func getGithubToken() (string, error) {
@@ -138,11 +168,9 @@ func getGithubToken() (string, error) {
 
 	token := os.Getenv(githubTokenEnvVariable)
 	if len(token) == 0 {
-		return "", errors.New(
-			fmt.Sprintf(
-				"CollectCommand: please provide a github token in the environment (%s)",
-				githubTokenEnvVariable,
-			),
+		return "", errors.Errorf(
+			"CollectCommand: please provide a github token in the environment (%s)",
+			githubTokenEnvVariable,
 		)
 	}
 

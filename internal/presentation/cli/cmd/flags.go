@@ -12,4 +12,10 @@ const (
 
 	flagCollectToDate      = "to"
 	flagCollectToDateShort = "t"
+
+	flagOutputFilePrefix      = "output-file-prefix"
+	flagOutputFilePrefixShort = "o"
+
+	flagRootVerbose      = "verbose"
+	flagRootVerboseShort = "v"
 )
