@@ -2,20 +2,21 @@ package git
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/go-github/github"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 const commitsPerPage = 100
 
-func NewGithubCommitsRepository(client *github.Client) *GithubCommitsRepository {
-	return &GithubCommitsRepository{client: client}
+func NewGithubCommitsRepository(client *github.Client, logger *zap.Logger) *GithubCommitsRepository {
+	return &GithubCommitsRepository{client: client, logger: logger}
 }
 
 type GithubCommitsRepository struct {
 	client *github.Client
+	logger *zap.Logger
 }
 
 func (r *GithubCommitsRepository) FindCommitsFor(
@@ -29,8 +30,17 @@ func (r *GithubCommitsRepository) FindCommitsFor(
 	result := make([]*github.RepositoryCommit, 0, commitsPerPage)
 
 	shouldRun := true
+
+	//nolint:dupl
 	for shouldRun {
-		fmt.Println("listing commits for", organization, repository, number, &opts)
+		r.logger.Debug(
+			"listing commits",
+			zap.String("organization", organization),
+			zap.String("repository", organization),
+			zap.Int("number", number),
+			zap.Int("page", opts.Page),
+			zap.Int("perPage", opts.PerPage),
+		)
 
 		commits, _, err := r.client.PullRequests.ListCommits(ctx, organization, repository, number, &opts)
 		if err != nil {

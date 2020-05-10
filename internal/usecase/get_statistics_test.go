@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/google/go-github/github"
 	"github.com/stefanoj3/gitstats/internal/usecase"
 	"github.com/stretchr/testify/assert"
@@ -120,7 +122,7 @@ func TestGetStatisticsShouldCreateStatistics(t *testing.T) {
 		return statisticsPRs, statisticsCommits, statisticsComments, nil
 	}}
 
-	sut := usecase.NewGetStatistics(&finder)
+	sut := usecase.NewGetStatistics(&finder, zap.NewNop())
 
 	stats, err := sut.GetStatistics(
 		context.Background(),
@@ -174,7 +176,7 @@ func TestGetStatisticsShouldFailWhenPullRequestFetcherFails(t *testing.T) {
 		return nil, nil, nil, errors.New(errorMessage)
 	}}
 
-	sut := usecase.NewGetStatistics(&finder)
+	sut := usecase.NewGetStatistics(&finder, zap.NewNop())
 
 	stats, err := sut.GetStatistics(
 		context.Background(),

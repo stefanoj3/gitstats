@@ -2,21 +2,22 @@ package git
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/go-github/github"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 const pullRequestsPerPage = 100
 
-func NewGithubPullRequestsRepository(client *github.Client) *GithubPullRequestsRepository {
-	return &GithubPullRequestsRepository{client: client}
+func NewGithubPullRequestsRepository(client *github.Client, logger *zap.Logger) *GithubPullRequestsRepository {
+	return &GithubPullRequestsRepository{client: client, logger: logger}
 }
 
 type GithubPullRequestsRepository struct {
 	client *github.Client
+	logger *zap.Logger
 }
 
 func (r *GithubPullRequestsRepository) FindPullRequestsFor(
@@ -57,12 +58,18 @@ func (r *GithubPullRequestsRepository) fetchAllFor(
 		Direction: "desc",
 	}
 
-	fmt.Println("performing call for", repository, listOptions)
-
 	result := make([]*github.PullRequest, 0, pullRequestsPerPage)
 
 	shouldRun := true
 	for shouldRun {
+		r.logger.Debug(
+			"listing commits",
+			zap.String("organization", organization),
+			zap.String("repository", organization),
+			zap.Int("page", listOptions.Page),
+			zap.Int("perPage", listOptions.PerPage),
+		)
+
 		pullRequests, _, err := r.client.PullRequests.List(ctx, organization, repository, &listOptions)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to fetch pull requests")

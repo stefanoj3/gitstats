@@ -15,10 +15,11 @@ type CollectConfig struct {
 	Organization string
 	Repositories []string
 	// Users should contain the handles of the users
-	Users []string
-	From  time.Time
-	To    time.Time
-	Delta time.Duration
+	Users            []string
+	From             time.Time
+	To               time.Time
+	Delta            time.Duration
+	OutputFilePrefix string
 }
 
 func getCollectConfig(cmd *cobra.Command) (CollectConfig, error) {
@@ -52,6 +53,8 @@ func getCollectConfig(cmd *cobra.Command) (CollectConfig, error) {
 	if err != nil {
 		return config, errors.Wrapf(err, "failed to parse %s", flagCollectDelta)
 	}
+
+	config.OutputFilePrefix = cmd.Flag(flagOutputFilePrefix).Value.String()
 
 	return config, nil
 }
