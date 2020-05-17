@@ -21,13 +21,13 @@ The token must have the
 
 If you have a config file, and the env variable is already available in your shell you can run the following command:
 ```bash
-docker run -e GITHUB_TOKEN -v $PWD:/data gitstats:latest gitstats collect -c /data/devconfig.toml -f 2020-04-01 -t 2020-05-01 -d 120h -v -o /data/out
+docker run -e GITHUB_TOKEN -v $PWD:/data stefanoj3/gitstats:latest gitstats collect -c /data/devconfig.toml -f 2020-04-01 -t 2020-05-01 -d 120h -v -o /data/out
 ```
 
 If you want to look into how you can customize the execution you can run to get more info:
 ```bash
-docker run -v $PWD:/data gitstats:latest gitstats help
-docker run -v $PWD:/data gitstats:latest gitstats collect -h
+docker run -v $PWD:/data stefanoj3/gitstats:latest gitstats help
+docker run -v $PWD:/data stefanoj3/gitstats:latest gitstats collect -h
 ```
 
 The output of the command consists of 2 csv files:
@@ -38,7 +38,7 @@ You can then import the CSV files in your preferred sheet application and visual
 
 ## [↑](#table-of-content) Download
 You have 2 options to get the application:
-- `docker run gitstats:latest <cmd>`: requires `docker` to be available in your `$PATH`
+- `docker run stefanoj3/gitstats:latest <cmd>`: requires `docker` to be available in your `$PATH`
 - Fetch this repository, run `make build` and then `cp dist/gitstats <path-of-your-choice>`: requires `go` and `make` to be available in your `$PATH`
 
 
