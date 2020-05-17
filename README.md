@@ -12,14 +12,35 @@ The application is still in development and it is missing core features.
 - [License](https://github.com/stefanoj3/gitstats/blob/master/LICENSE.md)
 
 ## [↑](#table-of-content) How to use it
-TODO: 
-- write me
-- add example usage
-- add screenshots
 
+In order to run the software you first need to define a config file for your team.
+[Here](sampleconfig.toml) you can find an example.
+
+You also need to pass a valid github token to the application via the environment variable `GITHUB_TOKEN`.
+The token must have the 
+
+If you have a config file, and the env variable is already available in your shell you can run the following command:
+```bash
+docker run -e GITHUB_TOKEN -v $PWD:/data gitstats:latest gitstats collect -c /data/devconfig.toml -f 2020-04-01 -t 2020-05-01 -d 120h -v -o /data/out
+```
+
+If you want to look into how you can customize the execution you can run to get more info:
+```bash
+docker run -v $PWD:/data gitstats:latest gitstats help
+docker run -v $PWD:/data gitstats:latest gitstats collect -h
+```
+
+The output of the command consists of 2 csv files:
+- pull requests statistics for the time frame specified, and the users specified in the config file
+- team statistics about pull requests open/closed/merged, and the average time to get a pr closed
+
+You can then import the CSV files in your preferred sheet application and visualize the data. 
 
 ## [↑](#table-of-content) Download
-TODO: write me
+You have 2 options to get the application:
+- `docker run gitstats:latest <cmd>`: requires `docker` to be available in your `$PATH`
+- Fetch this repository, run `make build` and then `cp dist/gitstats <path-of-your-choice>`: requires `go` and `make` to be available in your `$PATH`
+
 
 ## [↑](#table-of-content) Development
 
@@ -38,10 +59,3 @@ In order to run gitstats while developing all you need to do is:
 
 If you wanna play with the configuration just create another config file to use instead of `sampleconfig.toml`,
 by default `devconfig.toml` is ignored in the `.gitignore` file. 
-
-
-## What is missing:
-- the output needs to be printed in a format that can be used by a human
-- no statistics per users are produced (only general statistics for all repos/users involved)
-- add scrutinizer integration
-- dockerize application & docker hub integration
