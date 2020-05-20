@@ -63,7 +63,7 @@ func (r *GithubPullRequestsRepository) fetchAllFor(
 	shouldRun := true
 	for shouldRun {
 		r.logger.Debug(
-			"listing commits",
+			"listing pull requests",
 			zap.String("organization", organization),
 			zap.String("repository", organization),
 			zap.Int("page", listOptions.Page),
