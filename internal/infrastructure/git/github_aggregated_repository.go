@@ -51,7 +51,7 @@ func (r *GithubAggregatedRepository) FetchAllFor(
 	pullRequests, err := r.pullRequestsRepository.FindPullRequestsFor(
 		ctx,
 		from.Add(-delta),
-		to.Add(delta),
+		to,
 		organization,
 		repositories,
 	)
