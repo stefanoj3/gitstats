@@ -3,5 +3,5 @@ dist/
 !dist/.gitkeep
 coverage.txt
 devconfig.toml
-out_pull_requests.csv
-out_user.csv
+/out_pull_requests.csv
+/out_user.csv
