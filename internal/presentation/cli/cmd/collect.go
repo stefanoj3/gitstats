@@ -44,7 +44,8 @@ func NewCollectCommand(logger *zap.Logger) *cobra.Command {
 		flagCollectDelta,
 		flagCollectDeltaShort,
 		time.Hour*24*5,
-		"delta time used to search for comments/commits between the from/to in PRs in range bigger than the specific from/to",
+		"delta time is used to fetch PRs created before the `from` flag, so gitstats can look into them for comments "+
+			"and commits that match the from/to range",
 	)
 
 	cmd.Flags().StringP(
