@@ -65,7 +65,7 @@ func (r *GithubPullRequestsRepository) fetchAllFor(
 		r.logger.Debug(
 			"listing pull requests",
 			zap.String("organization", organization),
-			zap.String("repository", organization),
+			zap.String("repository", repository),
 			zap.Int("page", listOptions.Page),
 			zap.Int("perPage", listOptions.PerPage),
 		)

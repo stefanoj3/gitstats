@@ -40,7 +40,7 @@ func (r *GithubCommentsRepository) FindCommentsFor(
 		r.logger.Debug(
 			"listing comments",
 			zap.String("organization", organization),
-			zap.String("repository", organization),
+			zap.String("repository", repository),
 			zap.Int("number", number),
 			zap.Int("page", opts.Page),
 			zap.Int("perPage", opts.PerPage),
