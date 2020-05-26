@@ -80,6 +80,16 @@ func (g *GetStatistics) calculateUserStatistics(
 	}
 
 	for _, commit := range commits {
+		if commit.Author == nil {
+			g.logger.Warn(
+				"commit missing author, skipping",
+				zap.String("commitSHA", *commit.SHA),
+				zap.String("htmlURL", *commit.HTMLURL),
+			)
+
+			continue
+		}
+
 		if shouldExcludeFunc(*commit.Author.Login) {
 			continue
 		}
