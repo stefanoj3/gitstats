@@ -11,6 +11,7 @@ import (
 	"github.com/stefanoj3/gitstats/internal/domain/statistics"
 	"github.com/stefanoj3/gitstats/internal/infrastructure/git"
 	"github.com/stefanoj3/gitstats/internal/infrastructure/oauth"
+	"github.com/stefanoj3/gitstats/internal/presentation/cli/cmd/config"
 	"github.com/stefanoj3/gitstats/internal/presentation/serialization"
 	"github.com/stefanoj3/gitstats/internal/usecase"
 	"go.uber.org/zap"
@@ -23,10 +24,10 @@ func NewCollectCommand(logger *zap.Logger) *cobra.Command {
 		RunE:  buildCollectCommand(logger),
 	}
 
-	cmd.Flags().StringP(
+	cmd.Flags().StringSliceP(
 		flagCollectConfigFile,
 		flagCollectConfigFileShort,
-		"",
+		nil,
 		"configuration file for your team",
 	)
 	Must(cmd.MarkFlagFilename(flagCollectConfigFile))
@@ -77,7 +78,7 @@ func buildCollectCommand(logger *zap.Logger) func(cmd *cobra.Command, args []str
 			return errors.Wrap(err, "CollectCommand: failed to get token")
 		}
 
-		config, err := getCollectConfig(cmd)
+		cfg, err := getCollectConfig(cmd)
 		if err != nil {
 			return errors.Wrap(err, "CollectCommand: failed to get config")
 		}
@@ -100,23 +101,23 @@ func buildCollectCommand(logger *zap.Logger) func(cmd *cobra.Command, args []str
 
 		logger.Info(
 			"Starting to collect statistics",
-			zap.String("organization", config.Organization),
-			zap.Strings("repositories", config.Repositories),
-			zap.Strings("users", config.Users),
-			zap.Time("from", config.From),
-			zap.Time("to", config.To),
-			zap.Duration("delta", config.Delta),
+			zap.String("organization", cfg.Organization),
+			zap.Strings("repositories", cfg.Repositories),
+			zap.Strings("users", cfg.Users),
+			zap.Time("from", cfg.From),
+			zap.Time("to", cfg.To),
+			zap.Duration("delta", cfg.Delta),
 			zap.Int("tokenLen", len(token)),
 		)
 
 		stats, err := getStatisticsUseCase.GetStatistics(
 			ctx,
-			config.From,
-			config.To,
-			config.Delta,
-			config.Organization,
-			config.Repositories,
-			config.Users,
+			cfg.From,
+			cfg.To,
+			cfg.Delta,
+			cfg.Organization,
+			cfg.Repositories,
+			cfg.Users,
 		)
 		if err != nil {
 			return errors.Wrap(err, "CollectCommand: failed to get statistics")
@@ -131,12 +132,12 @@ func buildCollectCommand(logger *zap.Logger) func(cmd *cobra.Command, args []str
 			zap.Int("total", stats.PullRequestsStatistics.Total),
 		)
 
-		return writeOutput(config, stats, logger)
+		return writeOutput(cfg, stats, logger)
 	}
 }
 
-func writeOutput(config CollectConfig, stats *statistics.Statistics, logger *zap.Logger) error {
-	pullRequestsOutFile := config.OutputFilePrefix + "_pull_requests.csv"
+func writeOutput(c config.CollectConfig, stats *statistics.Statistics, logger *zap.Logger) error {
+	pullRequestsOutFile := c.OutputFilePrefix + "_pull_requests.csv"
 
 	logger.Info("Writing output file for pull requests", zap.String("path", pullRequestsOutFile))
 
@@ -145,16 +146,16 @@ func writeOutput(config CollectConfig, stats *statistics.Statistics, logger *zap
 		return errors.Wrap(err, "CollectCommand: failed to write pull requests statistics")
 	}
 
-	usersOutFile := config.OutputFilePrefix + "_user.csv"
+	usersOutFile := c.OutputFilePrefix + "_user.csv"
 
 	logger.Info("Writing output file for users", zap.String("path", usersOutFile))
 
 	err = serialization.WriteUsersStatistics(
 		usersOutFile,
 		stats.UsersStatistics,
-		config.From,
-		config.To,
-		config.Users,
+		c.From,
+		c.To,
+		c.Users,
 	)
 	if err != nil {
 		return errors.Wrap(err, "CollectCommand: failed to write users statistics")

@@ -6,55 +6,55 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/stefanoj3/gitstats/internal/presentation/cli/cmd/config"
 )
 
 const timeFormatLayout = "2006-01-02"
 const failedToParseTimeErrorString = "getCollectConfig: failed to parse `%s`, expected format is `Y-m-d`"
 
-type CollectConfig struct {
-	Organization string
-	Repositories []string
-	// Users should contain the handles of the users
-	Users            []string
-	From             time.Time
-	To               time.Time
-	Delta            time.Duration
-	OutputFilePrefix string
-}
+func getCollectConfig(cmd *cobra.Command) (config.CollectConfig, error) {
+	var c config.CollectConfig
 
-func getCollectConfig(cmd *cobra.Command) (CollectConfig, error) {
-	var (
-		config CollectConfig
-		err    error
-	)
-
-	configFilePath := cmd.Flag(flagCollectConfigFile).Value.String()
-
-	_, err = toml.DecodeFile(configFilePath, &config)
+	configFilePaths, err := cmd.Flags().GetStringSlice(flagCollectConfigFile)
 	if err != nil {
-		return config, errors.Wrapf(err, "getCollectConfig: failed to get config from %s", configFilePath)
+		return c, errors.Wrapf(err, "failed to read %s", flagCollectConfigFile)
+	}
+
+	for _, configFilePath := range configFilePaths {
+		var temporaryConfig config.CollectConfig
+
+		_, err = toml.DecodeFile(configFilePath, &temporaryConfig)
+		if err != nil {
+			return c, errors.Wrapf(err, "getCollectConfig: failed to get config from %s", configFilePath)
+		}
+
+		c = c.Merge(temporaryConfig)
 	}
 
 	rawFromDate := cmd.Flag(flagCollectFromDate).Value.String()
 
-	config.From, err = time.Parse(timeFormatLayout, rawFromDate)
+	c.From, err = time.Parse(timeFormatLayout, rawFromDate)
 	if err != nil {
-		return config, errors.Wrapf(err, failedToParseTimeErrorString, flagCollectFromDate)
+		return c, errors.Wrapf(err, failedToParseTimeErrorString, flagCollectFromDate)
 	}
 
 	rawToDate := cmd.Flag(flagCollectToDate).Value.String()
 
-	config.To, err = time.Parse(timeFormatLayout, rawToDate)
+	c.To, err = time.Parse(timeFormatLayout, rawToDate)
 	if err != nil {
-		return config, errors.Wrapf(err, failedToParseTimeErrorString, flagCollectToDate)
+		return c, errors.Wrapf(err, failedToParseTimeErrorString, flagCollectToDate)
 	}
 
-	config.Delta, err = cmd.Flags().GetDuration(flagCollectDelta)
+	c.Delta, err = cmd.Flags().GetDuration(flagCollectDelta)
 	if err != nil {
-		return config, errors.Wrapf(err, "failed to parse %s", flagCollectDelta)
+		return c, errors.Wrapf(err, "failed to parse %s", flagCollectDelta)
 	}
 
-	config.OutputFilePrefix = cmd.Flag(flagOutputFilePrefix).Value.String()
+	c.OutputFilePrefix = cmd.Flag(flagOutputFilePrefix).Value.String()
 
-	return config, nil
+	if len(c.Organization) == 0 {
+		return c, errors.New("invalid config: no `Organization` specified")
+	}
+
+	return c, nil
 }
