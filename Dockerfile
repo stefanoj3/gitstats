@@ -1,4 +1,4 @@
-FROM golang:1.14.3-alpine3.11 as builder
+FROM golang:1.15-alpine3.12  as builder
 
 RUN adduser -D -g '' gitstatsuser
 RUN apk add --update make git ca-certificates
